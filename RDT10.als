@@ -10,45 +10,48 @@ module RDT10
 open util/ordering[State]
 
 abstract sig Port {
-	
+	data: set Data
 }
 
-one sig Sender extends Port {
-	data: set Data
-} {no Data - data}
+sig Sender extends Port {
 
-one sig Receiver extends Port {
+}
+
+sig Receiver extends Port {
 
 }
 
 sig Data {
 
-}
+} {no Data - Sender.data}
 
 sig State {
-	sent: set Data,
-	received: set Data
+	sender: Sender,
+	receiver: Receiver
 }
 
 pred Init [s: State] {
-	no s.received
-	no s.sent
+	no s.receiver.data
+	no s.sender.data
 }
 
 pred End [s: State] {
-	Sender.data = s.received
+	s.sender.data = Data
+	s.receiver.data = Data
 }
 
 pred Step [s1, s2: State]  {
 	// Some new data has been sent
-	(some d: Sender.data |
-		s2.sent = s1.sent + d and
-		s1.sent = s2.sent - d)
+	(some d: s2.sender.data |
+		s2.sender.data = s1.sender.data + d and
+		s1.sender.data = s2.sender.data - d and
+		s1.receiver.data = s2.receiver.data)
 	or
 	// Some new data has been received
-	(some d: s1.sent |
-		s2.received = s2.received + d and
-		s1.received = s2.received - d)
+	(some d: s1.sender.data |
+		s2.receiver.data = s1.receiver.data + d and
+		s1.receiver.data = s2.receiver.data - d and
+		s1.sender.data = s2.sender.data)
 }
 
 pred Trace {
@@ -64,4 +67,4 @@ run Show for 3
 
 run Init for 3
 
-run Trace for 6 but exactly 3 Data
+run Trace for 8 but exactly 3 Data
