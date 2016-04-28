@@ -59,13 +59,24 @@ pred Step [s1, s2: NetworkState]  {
 		s1.channel = d.toPacket and
 		no s2.channel and
 		s1.sendBuffer = s2.sendBuffer)
+	or
+	(End[s1] and End[s2])
 }
 
 pred Trace {
 	Init[first]
 	all s: NetworkState - last |
 		let s' = s.next |
-			Step[s, s'] or End[s]
+			Step[s, s']
+}
+
+pred CanPass {
+	Trace and
+	some s:NetworkState | End[s]
+}
+
+assert MustPass {
+	Trace=>End[last]
 }
 
 pred Show {}
@@ -74,4 +85,8 @@ run Show for 3
 
 run Init for 3 but 3 Packet
 
-run Trace for 7 but exactly 3 Packet, exactly 3 Data
+run Trace for 7 but exactly 3 Packet
+
+run CanPass for 7 but exactly 3 Packet, exactly 1 Checksum
+
+check MustPass for 7 but 3 Packet
