@@ -7,56 +7,63 @@
 
 module RDT10
 
-open util/ordering[State]
-
-abstract sig Port {
-	data: set Data
-}
-
-sig Sender extends Port {
-
-}
-
-sig Receiver extends Port {
-
-}
+open util/ordering[NetworkState]
 
 sig Data {
-
-} {no Data - Sender.data}
-
-sig State {
-	sender: Sender,
-	receiver: Receiver
+	checksum: one Checksum,
+	packet: one Packet
 }
 
-pred Init [s: State] {
-	no s.receiver.data
-	no s.sender.data
+sig Checksum {}
+sig Packet {
+	data: some Data
 }
 
-pred End [s: State] {
-	s.sender.data = Data
-	s.receiver.data = Data
+sig NetworkState {
+	sendBuffer: set Data,
+	receiveBuffer: set Data,
+	channel: lone Packet
 }
 
-pred Step [s1, s2: State]  {
+fun Data.packageData : Packet {
+	this.packet
+}
+
+fun Packet.extractData : Data {
+	this.data
+}
+
+pred Init [s: NetworkState] {
+	no s.channel
+	no s.receiveBuffer
+	s.sendBuffer = Data
+}
+
+pred End [s: NetworkState] {
+	no s.channel
+	no s.sendBuffer
+	s.receiveBuffer = Data
+}
+
+pred Step [s1, s2: NetworkState]  {
 	// Some new data has been sent
-	(some d: s2.sender.data |
-		s2.sender.data = s1.sender.data + d and
-		s1.sender.data = s2.sender.data - d and
-		s1.receiver.data = s2.receiver.data)
+	one data: s1.sendBuffer |
+		s1.sendBuffer = s2.sendBuffer - data
+		s2.channel = data.packageData
+		no s1.channel
+		s1.receiveBuffer = s2.receiveBuffer
 	or
 	// Some new data has been received
-	(some d: s1.sender.data |
-		s2.receiver.data = s1.receiver.data + d and
-		s1.receiver.data = s2.receiver.data - d and
-		s1.sender.data = s2.sender.data)
+	one data: s2.receiveBuffer |
+		s1.receiveBuffer = s2.receiveBuffer - data
+		s1.channel = data.packageData
+		no s2.channel
+		s1.sendBuffer = s2.sendBuffer
 }
 
 pred Trace {
 	Init[first]
-	all s: State - last |
+	all s: NetworkState - last |
 		let s' = s.next |
 			Step[s, s'] or End[s]
 }
