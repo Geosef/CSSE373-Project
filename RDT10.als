@@ -9,15 +9,15 @@ module RDT10
 
 open util/ordering[NetworkState]
 
-sig Data {
-	checksum: one Checksum,
-	packet: one Packet
+sig Data {}
+sig Checksum {}
+
+sig Packet {
+	data: one Data,
+	checksum: one Checksum
 }
 
-sig Checksum {}
-sig Packet {
-	data: some Data
-}
+fact {no d:Data | #d.~data != 1}
 
 sig NetworkState {
 	sendBuffer: set Data,
@@ -25,11 +25,11 @@ sig NetworkState {
 	channel: lone Packet
 }
 
-fun Data.packageData : Packet {
-	this.packet
+fun Data.toPacket : Packet {
+	this.~data
 }
 
-fun Packet.extractData : Data {
+fun Packet.toData : Data {
 	this.data
 }
 
@@ -47,18 +47,18 @@ pred End [s: NetworkState] {
 
 pred Step [s1, s2: NetworkState]  {
 	// Some new data has been sent
-	one data: s1.sendBuffer |
-		s1.sendBuffer = s2.sendBuffer - data
-		s2.channel = data.packageData
-		no s1.channel
-		s1.receiveBuffer = s2.receiveBuffer
+	(one d: s1.sendBuffer |
+		s2.sendBuffer = s1.sendBuffer - d and
+		s2.channel = d.toPacket and
+		no s1.channel and
+		s1.receiveBuffer = s2.receiveBuffer)
 	or
 	// Some new data has been received
-	one data: s2.receiveBuffer |
-		s1.receiveBuffer = s2.receiveBuffer - data
-		s1.channel = data.packageData
-		no s2.channel
-		s1.sendBuffer = s2.sendBuffer
+	(one d: s2.receiveBuffer |
+		s2.receiveBuffer = s1.receiveBuffer + d and
+		s1.channel = d.toPacket and
+		no s2.channel and
+		s1.sendBuffer = s2.sendBuffer)
 }
 
 pred Trace {
@@ -72,6 +72,6 @@ pred Show {}
 
 run Show for 3
 
-run Init for 3
+run Init for 3 but 3 Packet
 
-run Trace for 8 but exactly 3 Data
+run Trace for 7 but exactly 3 Packet, exactly 3 Data
