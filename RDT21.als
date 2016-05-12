@@ -30,12 +30,7 @@ sig DataPacket extends Packet{
 	seqNum: one ReceiverState
 }
 one sig Ack extends Packet {}
-//one sig Ack0 extends Ack {}
-//one sig Ack1 extends Ack {}
-
 one sig Nack extends Packet {}
-//one sig Nack0 extends Nack {}
-//one sig Nack1 extends Nack {}
 
 fact {no d:Data | #d.~data != 1}
 
@@ -160,13 +155,11 @@ pred OneError {
 }
 
 pred CanPass {
-	Trace and
-	some s:NetworkState | End[s]
+	Trace and (some s:NetworkState | End[s])
 }
 
 pred CanPassWith1Error {
-	Trace and
-	OneError
+	(Trace and OneError) and (some s: NetworkState | End[s])
 }
 
 assert MustPass {
@@ -178,12 +171,6 @@ assert MustPassWith1Error {
 }
 
 pred Show {}
-
-//run Show for 3
-
-//run Init for 3 but 3 Packet
-
-//run Trace for 7 but exactly 3 Packet
 
 run CanPass for 8 but exactly 3 DataPacket
 
