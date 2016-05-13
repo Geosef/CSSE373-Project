@@ -18,19 +18,27 @@ abstract sig SenderState{}
 one sig Sending extends SenderState{}
 one sig Waiting extends SenderState{}
 
-abstract sig ReceiverState{}
-one sig Receiving1 extends ReceiverState {}
-one sig Receiving2 extends ReceiverState {}
+abstract sig Transmission {}
+one sig Transmission1 extends Transmission {}
+one sig Transmission2 extends Transmission {}
 
 abstract sig Packet {
+	transmission: Transmission
+}
+
+fact {
+	#Nack = 2
+	#Nack.transmission = 2
+	#Ack = 2
+	#Ack.transmission = 2
 }
 
 sig DataPacket extends Packet{
 	data: one Data,
-	seqNum: one ReceiverState
 }
-one sig Ack extends Packet {}
-one sig Nack extends Packet {}
+
+sig Ack extends Packet {}
+sig Nack extends Packet {}
 
 fact {no d:Data | #d.~data != 1}
 
@@ -39,7 +47,7 @@ sig NetworkState {
 	receiveBuffer: set Data,
 	channel: lone Packet,
 	senderState: one SenderState,
-	receiverState: one ReceiverState,
+	receiverState: one Transmission,
 	sentData: lone Data,
 	getChecksum: one Checksum
 }
@@ -53,13 +61,15 @@ fun Packet.toData : Data {
 }
 
 pred Init [s: NetworkState] {
-	s.channel = Ack
+	s.channel.transmission = Transmission2
 	no s.receiveBuffer
 	s.sendBuffer = Data
 	s.senderState = Sending
 	no s.sentData
-	s.receiverState = Receiving1
+	s.receiverState = Transmission1
 	s.getChecksum = GoodChecksum
+
+	some a: Ack | s.channel = a
 }
 
 pred End [s: NetworkState] {
@@ -79,19 +89,27 @@ pred SendNextPacket [s1, s2: NetworkState] {
 	s2.sendBuffer = s1.sendBuffer - s1.sentData and
 		((one d: s2.sendBuffer |
 			s2.channel = d.toPacket and
-			s2.sentData = d) or End[s2])
+			s2.sentData = d and
+			s2.channel.transmission != s1.channel.transmission) or End[s2])
 }
 
 pred SendAck [s1, s2: NetworkState] {
 	s2.receiveBuffer = s1.receiveBuffer + s1.channel.data and
-	s2.channel = Ack and
-	s2.receiverState != s1.receiverState
+	one a: Ack | (
+		s2.channel = a and
+		(
+			(s1.receiverState = s1.channel.transmission and s2.receiverState != s1.receiverState and a.transmission = s1.receiverState)
+			or
+			(s1.receiverState != s1.channel.transmission and s2.receiverState = s1.receiverState and a.transmission = s1.channel.transmission)
+		)
+	)
 }
 
 pred SendNack [s1, s2: NetworkState] {
 	s2.receiveBuffer = s1.receiveBuffer and
-	s2.channel = Nack and
-	s2.receiverState = s1.receiverState
+	s2.receiverState = s1.receiverState and
+	one n: Nack |
+		s2.channel = n
 }
 
 pred Step [s1, s2: NetworkState]  {
@@ -122,17 +140,17 @@ pred Step [s1, s2: NetworkState]  {
 		s1.sendBuffer = s2.sendBuffer and
 		s1.sentData = s2.sentData and
 		(
-			(
-				s1.channel.seqNum = s1.receiverState and
+//			(
+//				s1.channel.transmission = s1.receiverState and
 				(
 					(s1.getChecksum = GoodChecksum and SendAck[s1, s2] ) or
 					(s1.getChecksum = BadChecksum and SendNack[s1, s2] )
 				)
-			)
-			or
-			(
-				s1.channel.seqNum != s1.receiverState and SendNack[s1, s2]
-			)
+//			)
+//			or
+//			(
+//				s1.channel.transmission != s1.receiverState and SendAck[s1, s2]
+//			)
 		)
 	)
 	or
@@ -150,6 +168,12 @@ pred Trace {
 
 pred OneError {
 	all dp: DataPacket | #channel.dp = 2
+	// The number of times the packet appears in the channel = 2 implies
+	// It has been rejected exactly once
+}
+
+pred OneErrorResponse {
+	#Ack.~channel.getChecksum > 1
 	// The number of times the packet appears in the channel = 2 implies
 	// It has been rejected exactly once
 }
@@ -174,8 +198,8 @@ pred Show {}
 
 run CanPass for 8 but exactly 3 DataPacket
 
-run CanPassWith1Error for 14 but exactly 2 DataPacket
+run CanPassWith1Error for 14 but exactly 3 DataPacket
 
-check MustPass for 14 but 3 DataPacket
+check MustPass for 10 but 1 DataPacket
 
 check MustPassWith1Error for 14 but 3 DataPacket
